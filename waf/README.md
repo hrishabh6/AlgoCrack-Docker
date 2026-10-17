@@ -41,7 +41,7 @@ helm upgrade algocrack ./helm/algocrack -f helm/my-values.local.yaml \
 
 ## Local startup
 
-From the workspace root, after the usual images are available:
+The WAF service definition is `docker/waf/compose.yaml`. The root Compose file includes it and does not publish the API Gateway.
 
 ```bash
 docker compose up -d --build waf api-gateway
@@ -67,9 +67,11 @@ Image: `owasp/modsecurity-crs:4.25.2-nginx-202610051210-lts` (ModSecurity v3, CR
 | Request body access | On |
 | Request body limit | 1 MiB, reject when exceeded |
 | Allowed methods | GET HEAD POST PUT PATCH DELETE OPTIONS |
-| Audit log | RelevantOnly, JSON, container stdout |
+| Audit log | RelevantOnly, JSON, stdout, parts AHKZ (no headers, request body, or response body) |
 
 `crs-setup.conf` in this directory records those thresholds. The image entrypoint writes them into the CRS file at start.
+
+Audit records omit request headers and request and response bodies, so submitted source, `Authorization`, and cookies are not written there. Rule messages can still quote the matched fragment that caused a block.
 
 ## Source-code exclusion
 
@@ -79,11 +81,13 @@ Submission, run, and custom-run DTOs send user source in JSON field `code`. ModS
 - `POST /api/v1/submissions/run`
 - `POST /api/v1/submissions/custom`
 
-Other fields, the query string, headers, and the path stay inspected. A query parameter that is also named `code` on those three POST paths is covered by the same `ARGS:code` removal. Playground field `sourceCode` is not excluded.
+Other fields, the query string, headers, and the path stay inspected. A query parameter named `code` is `ARGS:code` and is still inspected.
+
+Playground create, update, and run send source in `sourceCode` (`ARGS:json.sourceCode`). The same SQLi/XSS removal applies on `POST /api/v1/playgrounds`, `POST /api/v1/playgrounds/run`, and `PUT /api/v1/playgrounds/{id}`. A query parameter named `sourceCode` stays inspected.
 
 ## Rate limits
 
-Per client IP, local/demo values, HTTP 429:
+Per client address, local/demo values, HTTP 429. The key is the TCP peer. Behind Kubernetes ingress, set `waf.trustedProxyCidrs` (Helm) or `SET_REAL_IP_FROM` (the base manifest) to the ingress controller source CIDR. The WAF then uses `X-Real-IP`, which ingress-nginx sets from the connection it accepted. `X-Forwarded-For` is not used, and a header from an untrusted peer does not change the key. Compose clients connect directly, so the default `127.0.0.1` trust list leaves their peer address in place.
 
 | Route | Rate | Burst |
 | --- | --- | --- |

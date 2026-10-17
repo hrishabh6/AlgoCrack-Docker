@@ -1,0 +1,17 @@
+# Tracked WAF service for the root Compose project.
+# The root file includes this one. Build context is this directory.
+services:
+  waf:
+    build:
+      context: .
+    environment:
+      MODSEC_RULE_ENGINE: ${MODSEC_RULE_ENGINE:-DetectionOnly}
+      BACKEND: http://api-gateway:9090
+      SERVER_NAME: localhost
+      REAL_IP_HEADER: X-Real-IP
+      REAL_IP_RECURSIVE: "off"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    ports:
+      - "9090:8080"
