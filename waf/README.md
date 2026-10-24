@@ -83,7 +83,15 @@ Submission, run, and custom-run DTOs send user source in JSON field `code`. ModS
 
 Other fields, the query string, headers, and the path stay inspected. A query parameter named `code` is `ARGS:code` and is still inspected.
 
-Playground create, update, and run send source in `sourceCode` (`ARGS:json.sourceCode`). The same SQLi/XSS removal applies on `POST /api/v1/playgrounds`, `POST /api/v1/playgrounds/run`, and `PUT /api/v1/playgrounds/{id}`. A query parameter named `sourceCode` stays inspected.
+Playground create, update, and run send source in `sourceCode` (`ARGS:json.sourceCode`). The SQLi/XSS policy and reviewed exclusions `10001023`/`10001024` remove only that field from the CRS `attack-injection-php` rule family on these exact routes. This covers Java false positives such as rule `933160` matching `System.out.printf`, without disabling the family for any other field or endpoint:
+
+- `POST /api/v1/playgrounds`
+- `POST /api/v1/playgrounds/run`
+- `PUT /api/v1/playgrounds/{numericId}`
+
+This permits Java syntax such as loops, `RuntimeException`, and `System.out.printf` without disabling CRS globally. Query parameters, headers, stdin, title, notes, every other JSON field, and all non-Playground endpoints remain inspected.
+
+`944110` is exceptional: it examines both parsed arguments and the raw `REQUEST_BODY`. Existing exclusions therefore remove `REQUEST_BODY` only for `944110` on these endpoints, because it contains the same submitted source document. The tradeoff is that this one rule cannot correlate a pattern split between `sourceCode` and another JSON field through the raw body. Parsed non-source fields remain individually inspected by `944110`, and all other CRS rules still inspect the body and those fields. Do not broaden that raw-body removal beyond `944110` or the three Playground write routes.
 
 ## Rate limits
 
